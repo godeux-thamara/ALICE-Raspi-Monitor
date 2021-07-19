@@ -29,11 +29,14 @@ class ArduinosManager():
         return {arduino.identity: arduino for arduino in self.arduinos_list if arduino.is_identified}
 
     def autodiscover(self):
+        """
+        Search for all devices connected to serial port and add them all
+        """
         for com_port in serial.tools.list_ports.comports():
             self.add_arduino(com_port.name, com_port.device)
         return len(self.arduinos)
 
-    def add_arduino(self, name, port):
+    def add_arduino(self, name, port, autoidentify=True):
         """
         Add an Arduino
         """
@@ -43,10 +46,11 @@ class ArduinosManager():
         self.arduinos[name].set_data_received_callback(self._data_received_callback)
         self.arduinos[name].set_identification_callback(self._arduino_identified_callback)
         self.arduinos[name].start_listening()
-        #self.arduinos[name].ask_identification()
         # It seems like it's better to wait a bit after the serial connection has been
         # initialized, otherwise it doesn't seem to work
-        threading.Timer(2, self.arduinos[name].ask_identification).start()
+        if autoidentify:
+            #self.arduinos[name].ask_identification()
+            threading.Timer(2, self.arduinos[name].ask_identification).start()
 
     def _data_received_callback(self, arduino_name, data, verbose=True):
         """

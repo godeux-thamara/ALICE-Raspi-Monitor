@@ -4,7 +4,6 @@ import itertools
 from events.events import Event, SensorEvent
 import events.actions
 from events.actions import Action
-from events.timeline import Timeline
 from arduinomanager.ArduinosManager import ArduinosManager
 from sensors.sensors import *
 from media.MediaManager import MediaManager
@@ -16,7 +15,6 @@ class Sketch:
     """docstring for Sketch."""
 
     def __init__(self, json_file=None):
-        self.timeline = Timeline()
         self.actions = {}
         self.events = {}
         self.sensors = {}
@@ -54,38 +52,42 @@ class Sketch:
 
         # Load actions
         for action in sketck_json['actions']:
-            self.actions[action['name']] = Action.from_json(action)
+            self.actions[action['id']] = Action.from_json(action)
 
         # Load events
         for event in sketck_json['events']:
-            self.events[event['name']] = Event()
+            self.events[event['id']] = Event(event)
 
         # Load sensors events
         for sensor_event in sketck_json['sensor_events']:
-            self.events[sensor_event['name']] = SensorEvent(self.sensors[sensor_event['sensor']])
-            self.events[sensor_event['name']].set_condition(sensor_event['condition'])
+            self.events[sensor_event['id']] = SensorEvent(sensor_event, self.sensors[sensor_event['sensor']])
+            self.events[sensor_event['id']].set_condition(sensor_event['condition'])
 
         # Binding actions to events and events to each other
         for event in itertools.chain(sketck_json['events'], sketck_json['sensor_events']):
-            for action in event['start_actions']:
-                self.events[event['name']].add_action(self.actions[action])
-            for action in event['stop_actions']:
-                self.events[event['name']].stop_action(self.actions[action])
-            for child_event in event['events']:
-                self.events[event['name']].add_event(self.events[child_event])
-            for sensor_event in event['start_listening']:
-                self.events[event['name']].start_listening_events.append(self.events[sensor_event])
-            for sensor_event in event['stop_listening']:
-                self.events[event['name']].stop_listening_events.append(self.events[sensor_event])
+            if 'start_actions' in event:
+                for action_id in event['start_actions']:
+                    self.events[event['id']].add_action(self.actions[action_id])
+            if 'stop_actions' in event:
+                for action_id in event['stop_actions']:
+                    self.events[event['id']].stop_action(self.actions[action_id])
+            if 'events' in event:
+                for child_event in event['events']:
+                    self.events[event['id']].add_event(self.events[child_event])
+            if 'start_listening' in event:
+                for sensor_event in event['start_listening']:
+                    self.events[event['id']].start_listening_events.append(self.events[sensor_event])
+            if 'stop_listening' in event:
+                for sensor_event in event['stop_listening']:
+                    self.events[event['id']].stop_listening_events.append(self.events[sensor_event])
 
-        # And finally, load timeline
-        for timeline_element in sketck_json['timeline']:
-            if 'events' in timeline_element:
-                for event in timeline_element['events']:
-                    self.timeline.add_timed_event(timeline_element['time'], self.events[event])
-            if 'actions' in timeline_element:
-                for action in timeline_element['actions']:
-                    self.timeline.add_timed_event(timeline_element['time'], self.actions[action])
+        # Binding each event to the next one
+        for event in itertools.chain(sketck_json['events'], sketck_json['sensor_events']):
+            if event['next']:
+                self.events[event['id']].next = self.events[event['next']]
+
+        # Setting first event
+        self.first_event = sketck_json['first_event']
 
 
     def data_received(self, data):
@@ -102,8 +104,8 @@ class Sketch:
         else:
             self.arduinos_manager.send_command(arduino, *args)
 
-    def fire_event(self, event_name):
-        self.events[event_name].fire()
+    def fire_event(self, event_id):
+        self.events[event_id].fire()
 
     def run(self):
-        self.timeline.run()
+        self.fire_event(self.first_event)

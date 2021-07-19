@@ -1,14 +1,19 @@
-from pydispatch import Dispatcher
+import threading
+import colorama
 from sensors.sensors import DistanceSensor, MovementSensor, ColorSensor
 
 __all__ = ['Event', 'SensorEvent']
 
 
-class Event(Dispatcher):
-    """docstring for Event."""
+class Event():
+    """Base class for events"""
 
-    def __init__(self):
+    def __init__(self, event_json):
         super().__init__()
+        self.id = event_json['id']
+        self.name = event_json['name']
+        self.delay = event_json['delay']
+        self.next = None
         self.start_actions = []
         self.stop_actions = []
         self.events = []
@@ -24,12 +29,16 @@ class Event(Dispatcher):
     def add_event(self, event):
         self.events.append(event)
 
-    def fire(self, *args, **kwargs):
+    def fire(self, *args, verbose=False, **kwargs):
+        if verbose:
+            print(f"Event {colorama.Fore.CYAN}{self.name}{colorama.Style.RESET_ALL}, id {self.id} fired")
         [action.fire(*args, **kwargs) for action in self.start_actions]
         [action.stop(*args, **kwargs) for action in self.stop_actions]
         [event(*args, **kwargs) for event in self.events]
         [event.start_listening() for event in self.start_listening_events]
         [event.stop_listening() for event in self.stop_listening_events]
+        if self.next:
+            threading.Timer(self.delay, self.next).start()
 
     emit = fire
 
@@ -40,10 +49,11 @@ class Event(Dispatcher):
 class SensorEvent(Event):
     """Class for sensor based event"""
 
-    def __init__(self, sensor, condition="0"):
-        super().__init__()
+    def __init__(self, event_json, sensor, condition="0"):
+        super().__init__(event_json)
         self.sensor = sensor
         self.condition = condition
+        # self.condition = event_json['condition']
 
     def new_data_received(self, _instance, new_data, old_data, _property):
         if self.eval_condition(new_data, old_data):
