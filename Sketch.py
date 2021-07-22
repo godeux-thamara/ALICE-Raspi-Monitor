@@ -1,12 +1,12 @@
 import json
 import time
 import itertools
+from arduinomanager.ArduinosManager import ArduinosManager
+from media.MediaManager import MediaManager
 from events.events import Event, SensorEvent
 import events.actions
 from events.actions import Action
-from arduinomanager.ArduinosManager import ArduinosManager
 from sensors.sensors import *
-from media.MediaManager import MediaManager
 
 __all__ = ['Sketch']
 

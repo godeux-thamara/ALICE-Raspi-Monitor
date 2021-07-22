@@ -7,6 +7,8 @@ import colorama
 import serial
 import serial.tools.list_ports
 from arduinomanager.ArduinoLinker import ArduinoLinker
+# pylint: disable=no-name-in-module
+from parameters import IGNORE_PORTS
 
 __all__ = ['ArduinosManager']
 
@@ -22,18 +24,25 @@ class ArduinosManager():
 
     @property
     def arduinos_list(self):
-        return self.arduinos.values()
+        return list(self.arduinos.values())
 
     @property
     def arduinos_by_identity(self):
         return {arduino.identity: arduino for arduino in self.arduinos_list if arduino.is_identified}
+    
+    @property
+    def arduinos_identified(self):
+        return [arduino for arduino in self.arduinos_list if arduino.is_identified]
 
-    def autodiscover(self):
+    def autodiscover(self, ignore_devices=IGNORE_PORTS, verbose=True):
         """
         Search for all devices connected to serial port and add them all
         """
+        if verbose:
+            print("Detecting connected Arduinos...")
         for com_port in serial.tools.list_ports.comports():
-            self.add_arduino(com_port.name, com_port.device)
+            if not com_port.device in ignore_devices:
+                self.add_arduino(com_port.name, com_port.device)
         return len(self.arduinos)
 
     def add_arduino(self, name, port, autoidentify=True):
@@ -74,25 +83,28 @@ class ArduinosManager():
         """
         self._callback = callback
 
-    def send_command(self, arduino_name, *args, send_by_id=True, verbose=True):
+    def send_command(self, arduinos_target, *args, send_by_identity=True, verbose=True):
         """
         Send a command to a specific (or some specific) Arduino(s)
         """
-        arduinos = self.arduinos_by_identity if send_by_id else self.arduinos
-        if type(arduino_name) is str:
-            arduino_name = [arduino_name]
+        arduinos = self.arduinos_by_identity if send_by_identity else self.arduinos
+        if type(arduinos_target) is str:
+            arduinos_target = [arduinos_target]
         if verbose:
-            print(f"Sending{colorama.Fore.YELLOW}", *args, f"{colorama.Style.RESET_ALL}to {colorama.Fore.BLUE}{', '.join(arduino_name)}{colorama.Style.RESET_ALL}")
-        for arduino in arduino_name:
-            arduinos[arduino].send_command(*args)
+            print(f"Sending{colorama.Fore.YELLOW}", *args, f"{colorama.Style.RESET_ALL}to {colorama.Fore.BLUE}{', '.join(arduinos_target)}{colorama.Style.RESET_ALL}")
+        for arduino in arduinos_target:
+            try:
+                arduinos[arduino].send_command(*args)
+            except KeyError:
+                print(f"{colorama.Back.RED}Arduino {colorama.Style.BRIGHT}{arduino}{colorama.Style.NORMAL} not identified!{colorama.Style.RESET_ALL}")
 
-    def broadcast(self, *args, verbose=True):
+    def broadcast(self, *args, identified_only=True, verbose=True):
         """
         Send a command to all Arduinos
         """
         if verbose:
             print(f"{colorama.Fore.BLUE}Broadcasting{colorama.Fore.YELLOW}", *args, colorama.Style.RESET_ALL)
-        for arduino in self.arduinos.values():
+        for arduino in self.arduinos_identified if identified_only else self.arduinos_list:
             arduino.send_command(*args)
 
     def __del__(self):

@@ -5,6 +5,8 @@ Python class for communication with an Arduino via Serial
 import threading
 import time
 import serial
+# pylint: disable=no-name-in-module
+from parameters import BAUDRATE
 
 __all__ = ['ArduinoLinker']
 
@@ -12,7 +14,7 @@ __all__ = ['ArduinoLinker']
 class ArduinoLinker():
     """Python class for communication with an Arduino via Serial"""
 
-    def __init__(self, port, baudrate=9600, name=None, auto_identification=False, autostart_listening=False):
+    def __init__(self, port, baudrate=BAUDRATE, name=None, auto_identification=False, autostart_listening=False):
         self._serial = serial.Serial(port, baudrate)
         self.name = name
         self.listening = False
@@ -118,9 +120,7 @@ class ArduinoLinker():
         while self.listening:
             if self._data_received_callback and self._serial.in_waiting:
                 line = self._readline()
-                #self._identify(line) or self._data_received_callback(line)
-                if not self._identify(line):
-                    self._data_received_callback(self.name, line)
+                self._identify(line) or self._data_received_callback(self.name, line)
             else:
                 time.sleep(.01)
 
