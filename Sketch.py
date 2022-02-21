@@ -14,18 +14,23 @@ __all__ = ['Sketch']
 class Sketch:
     """docstring for Sketch."""
 
-    def __init__(self, json_file=None):
+    def __init__(self, json_file = None, first_event_id = None):
         self.actions = {}
         self.events = {}
         self.sensors = {}
         self.arduinos_manager = ArduinosManager()
         self.arduinos_manager.set_callback(self.data_received)
         self.mediamanager = MediaManager()
+        self.first_id = first_event_id if first_event_id else None
+        self.go_next = True
         if json_file:
+            self.json_file = json_file
             self.load_from_json(json_file)
-
+        else:
+            self.json_file = None
         events.actions.sketch = self
         self.arduinos_manager.autodiscover()
+        
         time.sleep(2)
 
     @property
@@ -82,12 +87,22 @@ class Sketch:
                     self.events[event['id']].stop_listening_events.append(self.events[sensor_event])
 
         # Binding each event to the next one
-        for event in itertools.chain(sketck_json['events'], sketck_json['sensor_events']):
-            if event['next']:
+        for event in itertools.chain(sketck_json['events'], sketck_json['sensor_events']):         
+            if 'start_listening' in event:
+                for sensor_event in event['start_listening']:
+                    if(self.events[sensor_event].stop_next):
+                        self.go_next = False   
+            if self.go_next and event['next']:         
                 self.events[event['id']].next = self.events[event['next']]
-
+            if event['loop']:
+                self.events[event['id']].next = self.events[event['id']]
+            
+        
         # Setting first event
-        self.first_event = sketck_json['first_event']
+        if self.first_id:
+            self.first_event = self.first_id
+        else:
+            self.first_event = sketck_json['first_event']
 
 
     def data_received(self, data):
@@ -99,10 +114,31 @@ class Sketch:
         self.sensors[sensor].data_received(data)
 
     def send(self, *args, arduino=None):
-        if arduino is None:
-            self.arduinos_manager.broadcast(*args)
-        else:
-            self.arduinos_manager.send_command(arduino, *args)
+        args2 = []
+        sketck_json = json.load(open(self.json_file))
+        for arg in args:
+            if isinstance(arg,str) and str(arg[:6]) == 'Listen':
+                for sensor in sketck_json['sensors']:
+                    if sensor['name'] == str(arg[6:-1]):
+                        if (str(arg[-1]) == '1') and self.sensors[sensor['name']].values:
+                            args2.append(self.sensors[sensor['name']].values[0])
+                        elif (str(arg[-1]) == '2') and len(self.sensors[sensor['name']].values) >= 2:
+                            args2.append(self.sensors[sensor['name']].values[1])
+                        elif (str(arg[-1]) == '3') and len(self.sensors[sensor['name']].values) >= 3:
+                            args2.append(self.sensors[sensor['name']].values[2])
+            else:
+                args2.append(arg)
+        stop_next = False
+        # for event in itertools.chain(sketck_json['events'], sketck_json['sensor_events']):
+        #     if 'start_listening' in event:
+        #         for sensor_event in event['start_listening']:
+        #             if(self.events[sensor_event].stop_next):
+        #                 stop_next = True
+                        
+        if arduino is None and not stop_next:
+            self.arduinos_manager.broadcast(*args2)
+        elif not stop_next:
+            self.arduinos_manager.send_command(arduino, *args2)
 
     def fire_event(self, event_id):
         self.events[event_id].fire()

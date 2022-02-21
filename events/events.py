@@ -1,6 +1,7 @@
 import threading
 import colorama
 from sensors.sensors import DistanceSensor, MovementSensor, ColorSensor
+import time
 
 __all__ = ['Event', 'SensorEvent']
 
@@ -17,6 +18,7 @@ class Event():
         self.start_actions = []
         self.stop_actions = []
         self.events = []
+        self.stop_next = False
         self.start_listening_events = []
         self.stop_listening_events = []
 
@@ -37,8 +39,13 @@ class Event():
         [event(*args, **kwargs) for event in self.events]
         [event.start_listening() for event in self.start_listening_events]
         [event.stop_listening() for event in self.stop_listening_events]
+        time.sleep(self.delay)
+        for event in self.start_listening_events:
+            print("LAAAAA")
+            if event.stop_next:
+                self.next = None
         if self.next:
-            threading.Timer(self.delay, self.next).start()
+            threading.Timer(0, self.next).start()
 
     emit = fire
 
@@ -55,11 +62,11 @@ class SensorEvent(Event):
         self.condition = condition
         # self.condition = event_json['condition']
 
-    def new_data_received(self, _instance, new_data, old_data, _property):
-        if self.eval_condition(new_data, old_data):
+    def new_data_received(self, _instance, new_data, **kwargs):
+        if self.eval_condition(new_data):
             self.fire()
 
-    def eval_condition(self, new_data, old_data):
+    def eval_condition(self, new_data):
         # TODO: sensor condition evaluation
         variables = {}
         if isinstance(self.sensor, DistanceSensor):
@@ -70,6 +77,7 @@ class SensorEvent(Event):
             variables = {"red": self.sensor.red, "green": self.sensor.green, "blue": self.sensor.blue}
 
         if eval(self.condition, variables):
+            self.stop_next = True
             self.stop_listening()
             return True
         return False
