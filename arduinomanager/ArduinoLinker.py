@@ -1,7 +1,7 @@
 """
 Python class for communication with an Arduino via Serial
 """
-
+"test"
 import threading
 import time
 import serial
